@@ -20,7 +20,7 @@ type externalAuth struct{}
 type durableExchange struct{}
 
 // ServerDurableQueue provide durable queue option for micro.RegisterSubscriber
-func ServerDurableQueue()server.SubscriberOption{
+func ServerDurableQueue() server.SubscriberOption {
 	return setServerSubscriberOption(durableQueueKey{}, true)
 }
 

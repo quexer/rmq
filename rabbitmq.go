@@ -4,6 +4,7 @@ package rabbitmq
 import (
 	"context"
 	"errors"
+	"strconv"
 	"sync"
 	"time"
 
@@ -153,6 +154,12 @@ func (r *rbroker) Publish(topic string, msg *broker.Message, opts ...broker.Publ
 	for _, o := range opts {
 		o(&options)
 	}
+
+	if s := msg.Header[deliveryModeHeader]; s != "" {
+		v, _ := strconv.Atoi(s)
+		m.DeliveryMode = uint8(v)
+	}
+	// message setting will overwrote by broker setting
 
 	if options.Context != nil {
 		if value, ok := options.Context.Value(deliveryMode{}).(uint8); ok {
