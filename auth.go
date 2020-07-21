@@ -1,4 +1,4 @@
-package rabbitmq
+package rmq
 
 type ExternalAuthentication struct {
 }
