@@ -44,7 +44,7 @@ type publication struct {
 }
 
 func init() {
-	cmd.DefaultBrokers["rabbitmq"] = NewBroker
+	cmd.DefaultBrokers["rmq"] = NewBroker
 }
 
 func (p *publication) Ack() error {
@@ -259,7 +259,7 @@ func (r *rbroker) Options() broker.Options {
 }
 
 func (r *rbroker) String() string {
-	return "rabbitmq"
+	return "rmq"
 }
 
 func (r *rbroker) Address() string {
