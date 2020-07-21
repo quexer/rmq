@@ -4,6 +4,7 @@ package rabbitmq
 import (
 	"context"
 	"errors"
+	"strconv"
 	"sync"
 	"time"
 
@@ -43,7 +44,7 @@ type publication struct {
 }
 
 func init() {
-	cmd.DefaultBrokers["rabbitmq"] = NewBroker
+	cmd.DefaultBrokers["rmq"] = NewBroker
 }
 
 func (p *publication) Ack() error {
@@ -154,6 +155,12 @@ func (r *rbroker) Publish(topic string, msg *broker.Message, opts ...broker.Publ
 		o(&options)
 	}
 
+	if s := msg.Header[deliveryModeHeader]; s != "" {
+		v, _ := strconv.Atoi(s)
+		m.DeliveryMode = uint8(v)
+	}
+	// message setting will overwrote by broker setting
+
 	if options.Context != nil {
 		if value, ok := options.Context.Value(deliveryMode{}).(uint8); ok {
 			m.DeliveryMode = value
@@ -252,7 +259,7 @@ func (r *rbroker) Options() broker.Options {
 }
 
 func (r *rbroker) String() string {
-	return "rabbitmq"
+	return "rmq"
 }
 
 func (r *rbroker) Address() string {
