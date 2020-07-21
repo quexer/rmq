@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/micro/go-micro/v2/broker"
+	"github.com/micro/go-micro/v2/server"
 )
 
 type durableQueueKey struct{}
@@ -17,6 +18,11 @@ type deliveryMode struct{}
 type priorityKey struct{}
 type externalAuth struct{}
 type durableExchange struct{}
+
+// ServerDurableQueue provide durable queue option for micro.RegisterSubscriber
+func ServerDurableQueue()server.SubscriberOption{
+	return setServerSubscriberOption(durableQueueKey{}, true)
+}
 
 // DurableQueue creates a durable queue when subscribing.
 func DurableQueue() broker.SubscribeOption {
