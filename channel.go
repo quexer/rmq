@@ -1,4 +1,4 @@
-package rabbitmq
+package rmq
 
 //
 // All credit to Mondo

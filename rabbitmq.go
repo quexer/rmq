@@ -1,5 +1,5 @@
-// Package rabbitmq provides a RabbitMQ broker
-package rabbitmq
+// package rmq provides a RabbitMQ broker
+package rmq
 
 import (
 	"context"

@@ -1,4 +1,4 @@
-package rabbitmq_test
+package rmq_test
 
 import (
 	"context"
