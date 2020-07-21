@@ -19,6 +19,11 @@ type priorityKey struct{}
 type externalAuth struct{}
 type durableExchange struct{}
 
+// ServerAckOnSuccess support "manual ack" on success
+func ServerAckOnSuccess() server.SubscriberOption {
+	return setServerSubscriberOption(ackSuccessKey{}, true)
+}
+
 // ServerDurableQueue provide durable queue option for micro.RegisterSubscriber
 func ServerDurableQueue() server.SubscriberOption {
 	return setServerSubscriberOption(durableQueueKey{}, true)
