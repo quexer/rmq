@@ -3,12 +3,12 @@ package rmq
 import (
 	"context"
 
-	"github.com/micro/go-micro/v2/broker"
-	"github.com/micro/go-micro/v2/metadata"
-	"github.com/micro/go-micro/v2/server"
+	"go-micro.dev/v4/broker"
+	"go-micro.dev/v4/metadata"
+	"go-micro.dev/v4/server"
 )
 
-// setSubscribeOption returns a function to setup a context with given value
+// setSubscribeOption returns a function to setup a context with given value.
 func setSubscribeOption(k, v interface{}) broker.SubscribeOption {
 	return func(o *broker.SubscribeOptions) {
 		if o.Context == nil {
@@ -18,7 +18,7 @@ func setSubscribeOption(k, v interface{}) broker.SubscribeOption {
 	}
 }
 
-// setBrokerOption returns a function to setup a context with given value
+// setBrokerOption returns a function to setup a context with given value.
 func setBrokerOption(k, v interface{}) broker.Option {
 	return func(o *broker.Options) {
 		if o.Context == nil {
@@ -28,7 +28,7 @@ func setBrokerOption(k, v interface{}) broker.Option {
 	}
 }
 
-// setBrokerOption returns a function to setup a context with given value
+// setBrokerOption returns a function to setup a context with given value.
 func setServerSubscriberOption(k, v interface{}) server.SubscriberOption {
 	return func(o *server.SubscriberOptions) {
 		if o.Context == nil {
@@ -38,7 +38,7 @@ func setServerSubscriberOption(k, v interface{}) server.SubscriberOption {
 	}
 }
 
-// setPublishOption returns a function to setup a context with given value
+// setPublishOption returns a function to setup a context with given value.
 func setPublishOption(k, v interface{}) broker.PublishOption {
 	return func(o *broker.PublishOptions) {
 		if o.Context == nil {

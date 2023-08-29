@@ -1,11 +1,11 @@
 # rmq
 RabbitMQ plugin for go-micro.  
 
-Fork from https://github.com/micro/go-plugins/tree/master/broker/rabbitmq
+Fork from https://github.com/go-micro/plugins/tree/main/v4/broker/rabbitmq
 
 Support server durable queue and durable message publishing
 
-### require go-micro v2.9.1+
+### require go-micro.dev/v4 
 
 ### change log:
 

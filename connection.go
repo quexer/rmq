@@ -12,20 +12,32 @@ import (
 	"time"
 
 	"github.com/streadway/amqp"
+	"go-micro.dev/v4/logger"
+)
+
+type MQExchangeType string
+
+const (
+	ExchangeTypeFanout MQExchangeType = "fanout"
+	ExchangeTypeTopic                 = "topic"
+	ExchangeTypeDirect                = "direct"
 )
 
 var (
 	DefaultExchange = Exchange{
 		Name: "micro",
+		Type: ExchangeTypeTopic,
 	}
-	DefaultRabbitURL      = "amqp://guest:guest@127.0.0.1:5672"
-	DefaultPrefetchCount  = 0
-	DefaultPrefetchGlobal = false
-	DefaultRequeueOnError = false
+	DefaultRabbitURL       = "amqp://guest:guest@127.0.0.1:5672"
+	DefaultPrefetchCount   = 0
+	DefaultPrefetchGlobal  = false
+	DefaultRequeueOnError  = false
+	DefaultConfirmPublish  = false
+	DefaultWithoutExchange = false
 
 	// The amqp library does not seem to set these when using amqp.DialConfig
 	// (even though it says so in the comments) so we set them manually to make
-	// sure to not brake any existing functionality
+	// sure to not brake any existing functionality.
 	defaultHeartbeat = 10 * time.Second
 	defaultLocale    = "en_US"
 
@@ -44,26 +56,32 @@ type rabbitMQConn struct {
 	Channel         *rabbitMQChannel
 	ExchangeChannel *rabbitMQChannel
 	exchange        Exchange
+	withoutExchange bool
 	url             string
 	prefetchCount   int
 	prefetchGlobal  bool
+	confirmPublish  bool
 
 	sync.Mutex
 	connected bool
 	close     chan bool
 
 	waitConnection chan struct{}
+
+	logger logger.Logger
 }
 
-// Exchange is the rabbitmq exchange
+// Exchange is the rabbitmq exchange.
 type Exchange struct {
 	// Name of the exchange
 	Name string
+	// Type of the exchange
+	Type MQExchangeType
 	// Whether its persistent
 	Durable bool
 }
 
-func newRabbitMQConn(ex Exchange, urls []string, prefetchCount int, prefetchGlobal bool) *rabbitMQConn {
+func newRabbitMQConn(ex Exchange, urls []string, prefetchCount int, prefetchGlobal bool, confirmPublish bool, withoutExchange bool, logger logger.Logger) *rabbitMQConn {
 	var url string
 
 	if len(urls) > 0 && regexp.MustCompile("^amqp(s)?://.*").MatchString(urls[0]) {
@@ -73,12 +91,15 @@ func newRabbitMQConn(ex Exchange, urls []string, prefetchCount int, prefetchGlob
 	}
 
 	ret := &rabbitMQConn{
-		exchange:       ex,
-		url:            url,
-		prefetchCount:  prefetchCount,
-		prefetchGlobal: prefetchGlobal,
-		close:          make(chan bool),
-		waitConnection: make(chan struct{}),
+		exchange:        ex,
+		url:             url,
+		withoutExchange: withoutExchange,
+		prefetchCount:   prefetchCount,
+		prefetchGlobal:  prefetchGlobal,
+		confirmPublish:  confirmPublish,
+		close:           make(chan bool),
+		waitConnection:  make(chan struct{}),
+		logger:          logger,
 	}
 	// its bad case of nil == waitConnection, so close it at start
 	close(ret.waitConnection)
@@ -117,26 +138,47 @@ func (r *rabbitMQConn) reconnect(secure bool, config *amqp.Config) {
 			r.Lock()
 			r.connected = true
 			r.Unlock()
-			//unblock resubscribe cycle - close channel
-			//at this point channel is created and unclosed - close it without any additional checks
+			// unblock resubscribe cycle - close channel
+			// at this point channel is created and unclosed - close it without any additional checks
 			close(r.waitConnection)
 		}
 
 		connect = true
 		notifyClose := make(chan *amqp.Error)
 		r.Connection.NotifyClose(notifyClose)
-
-		// block until closed
-		select {
-		case <-notifyClose:
-			// block all resubscribe attempt - they are useless because there is no connection to rabbitmq
-			// create channel 'waitConnection' (at this point channel is nil or closed, create it without unnecessary checks)
-			r.Lock()
-			r.connected = false
-			r.waitConnection = make(chan struct{})
-			r.Unlock()
-		case <-r.close:
-			return
+		chanNotifyClose := make(chan *amqp.Error)
+		var channel *amqp.Channel
+		if !r.withoutExchange {
+			channel = r.ExchangeChannel.channel
+		} else {
+			channel = r.Channel.channel
+		}
+		channel.NotifyClose(chanNotifyClose)
+		// To avoid deadlocks it is necessary to consume the messages from all channels.
+		for notifyClose != nil || chanNotifyClose != nil {
+			// block until closed
+			select {
+			case err := <-chanNotifyClose:
+				r.logger.Log(logger.ErrorLevel, err)
+				// block all resubscribe attempt - they are useless because there is no connection to rabbitmq
+				// create channel 'waitConnection' (at this point channel is nil or closed, create it without unnecessary checks)
+				r.Lock()
+				r.connected = false
+				r.waitConnection = make(chan struct{})
+				r.Unlock()
+				chanNotifyClose = nil
+			case err := <-notifyClose:
+				r.logger.Log(logger.ErrorLevel, err)
+				// block all resubscribe attempt - they are useless because there is no connection to rabbitmq
+				// create channel 'waitConnection' (at this point channel is nil or closed, create it without unnecessary checks)
+				r.Lock()
+				r.connected = false
+				r.waitConnection = make(chan struct{})
+				r.Unlock()
+				notifyClose = nil
+			case <-r.close:
+				return
+			}
 		}
 	}
 }
@@ -204,22 +246,23 @@ func (r *rabbitMQConn) tryConnect(secure bool, config *amqp.Config) error {
 		return err
 	}
 
-	if r.Channel, err = newRabbitChannel(r.Connection, r.prefetchCount, r.prefetchGlobal); err != nil {
+	if r.Channel, err = newRabbitChannel(r.Connection, r.prefetchCount, r.prefetchGlobal, r.confirmPublish); err != nil {
 		return err
 	}
 
-	if r.exchange.Durable {
-		r.Channel.DeclareDurableExchange(r.exchange.Name)
-	} else {
-		r.Channel.DeclareExchange(r.exchange.Name)
+	if !r.withoutExchange {
+		if r.exchange.Durable {
+			r.Channel.DeclareDurableExchange(r.exchange.Name)
+		} else {
+			r.Channel.DeclareExchange(r.exchange)
+		}
+		r.ExchangeChannel, err = newRabbitChannel(r.Connection, r.prefetchCount, r.prefetchGlobal, r.confirmPublish)
 	}
-	r.ExchangeChannel, err = newRabbitChannel(r.Connection, r.prefetchCount, r.prefetchGlobal)
-
 	return err
 }
 
 func (r *rabbitMQConn) Consume(queue, key string, headers amqp.Table, qArgs amqp.Table, autoAck, durableQueue bool) (*rabbitMQChannel, <-chan amqp.Delivery, error) {
-	consumerChannel, err := newRabbitChannel(r.Connection, r.prefetchCount, r.prefetchGlobal)
+	consumerChannel, err := newRabbitChannel(r.Connection, r.prefetchCount, r.prefetchGlobal, r.confirmPublish)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -239,14 +282,19 @@ func (r *rabbitMQConn) Consume(queue, key string, headers amqp.Table, qArgs amqp
 		return nil, nil, err
 	}
 
-	err = consumerChannel.BindQueue(queue, key, r.exchange.Name, headers)
-	if err != nil {
-		return nil, nil, err
+	if !r.withoutExchange {
+		err = consumerChannel.BindQueue(queue, key, r.exchange.Name, headers)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
 	return consumerChannel, deliveries, nil
 }
 
 func (r *rabbitMQConn) Publish(exchange, key string, msg amqp.Publishing) error {
+	if r.withoutExchange {
+		return r.Channel.Publish("", key, msg)
+	}
 	return r.ExchangeChannel.Publish(exchange, key, msg)
 }
