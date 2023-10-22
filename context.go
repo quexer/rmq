@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"go-micro.dev/v4/broker"
-	"go-micro.dev/v4/metadata"
 	"go-micro.dev/v4/server"
 )
 
@@ -46,19 +45,4 @@ func setPublishOption(k, v interface{}) broker.PublishOption {
 		}
 		o.Context = context.WithValue(o.Context, k, v)
 	}
-}
-
-const deliveryModeHeader = "RabbitMQ-Delivery-Mode"
-
-// DurableMessageContext create new context with metadata for durable message sending
-func DurableMessageContext(ctx context.Context) context.Context {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	md, ok := metadata.FromContext(ctx)
-	if !ok {
-		md = make(map[string]string)
-	}
-	md[deliveryModeHeader] = "2" // 2 means durable per rabbitMQ doc
-	return metadata.NewContext(ctx, md)
 }
